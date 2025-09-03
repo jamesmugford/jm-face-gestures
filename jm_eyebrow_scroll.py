@@ -84,15 +84,18 @@ def start_face_tracking(port=DEFAULT_UDP_PORT):
             #print(f"Decode success: {success}")
             if success:
                 # get eyebrow blendshape values
-                brow_down_left = live_link_face.get_blendshape(FaceBlendShape.BrowDownLeft)
-                brow_down_right = live_link_face.get_blendshape(FaceBlendShape.BrowDownRight)
-                brow_inner_up = live_link_face.get_blendshape(FaceBlendShape.BrowInnerUp)
-                brow_outer_up_left = live_link_face.get_blendshape(FaceBlendShape.BrowOuterUpLeft)
-                brow_outer_up_right = live_link_face.get_blendshape(FaceBlendShape.BrowOuterUpRight)
+                get_bs = live_link_face.get_blendshape
+                brow_down_left = get_bs(FaceBlendShape.BrowDownLeft)
+                brow_down_right = get_bs(FaceBlendShape.BrowDownRight)
+                brow_inner_up = get_bs(FaceBlendShape.BrowInnerUp)
+                brow_outer_up_left = get_bs(FaceBlendShape.BrowOuterUpLeft)
+                brow_outer_up_right = get_bs(FaceBlendShape.BrowOuterUpRight)
                 
                 # Combine the values
                 
-                brow_up = (brow_inner_up + brow_outer_up_left + brow_outer_up_right) / 3
+                brow_up = (
+                    brow_inner_up + brow_outer_up_left + brow_outer_up_right
+                ) / 3
                 # For down movement: average of left and right
                 brow_down = (brow_down_left + brow_down_right) / 2
                 
@@ -100,10 +103,16 @@ def start_face_tracking(port=DEFAULT_UDP_PORT):
                 scroll_amount = float(0)
                 if brow_up > SCROLL_THRESHOLD:
                     # Scroll up (positive value)
-                    scroll_amount = min(SCROLL_SPEED * (brow_up - SCROLL_THRESHOLD), MAX_SCROLL)
+                    scroll_amount = min(
+                        SCROLL_SPEED * (brow_up - SCROLL_THRESHOLD),
+                        MAX_SCROLL,
+                    )
                 elif brow_down > SCROLL_THRESHOLD:
                     # Scroll down (negative value)
-                    scroll_amount = -min(SCROLL_SPEED * (brow_down - SCROLL_THRESHOLD), MAX_SCROLL)
+                    scroll_amount = -min(
+                        SCROLL_SPEED * (brow_down - SCROLL_THRESHOLD),
+                        MAX_SCROLL,
+                    )
                 #scroll_amount = 1
                 # Apply scrolling if there's movement
                 if scroll_amount != 0:
@@ -112,7 +121,8 @@ def start_face_tracking(port=DEFAULT_UDP_PORT):
                     time.sleep(1/120)  # approximately 60fps
                 
                 print(f"Name: {live_link_face.name}")
-                print(f"Combined Brow Movement - Up: {brow_up:.2f}, Down: {brow_down:.2f}")
+                print(
+                    f"Combined Brow Movement - Up: {brow_up:.2f}, Down: {brow_down:.2f}")
                 print(f"Scroll amount: {scroll_amount}")
                 print("-" * 40)
     except KeyboardInterrupt:
@@ -121,7 +131,8 @@ def start_face_tracking(port=DEFAULT_UDP_PORT):
         s.close()
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Eyebrow-controlled scroll using face tracking')
+    parser = argparse.ArgumentParser(
+        description='Eyebrow-controlled scroll using face tracking')
     parser.add_argument('--port', type=int, default=DEFAULT_UDP_PORT,
                       help=f'UDP port to listen on (default: {DEFAULT_UDP_PORT})')
     args = parser.parse_args()
