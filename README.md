@@ -1,6 +1,12 @@
-# Eyebrow Scroll
+# Face Gestures
 
-Control scrolling with your eyebrows using an iPhone with Face ID. Uses LiveLink Face tracking to enable hands-free scrolling through eyebrow movements.
+Control your computer (Windows, Mac and Linux) with face gestures. 
+
+Currently uses iPhone with Face ID for the sensing technology, but Android devices may be added soon.
+
+First usecase supported: scrolling with your eyebrows. 
+
+Uses LiveLink Face tracking to enable hands-free scrolling through eyebrow movements.
 
 ## Quick Start
 
