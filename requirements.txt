@@ -4,5 +4,6 @@ pywin32; platform_system == 'Windows'
 # macOS-specific requirements
 pyobjc-framework-Quartz; platform_system == 'Darwin'
 python-Xlib; platform_system == 'Linux'
+evdev; platform_system == 'Linux'
 
 #######################################################################################
