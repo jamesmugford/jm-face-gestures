@@ -8,7 +8,7 @@ from scroll_core import (
     scroll_amount_from_brows,
     scroll_amount_from_movement,
 )
-from scroll_pacer import WheelPacer, WheelPacerConfig
+from scroll_pacer import PacerConfig, PacerState, rate_for_amount, step_pacer
 
 
 class ScrollCoreTests(unittest.TestCase):
@@ -77,48 +77,75 @@ class ScrollCoreTests(unittest.TestCase):
         self.assertAlmostEqual(amount, 0.2)
 
 
-class WheelPacerTests(unittest.TestCase):
-    def fixed_pacer(self, max_ticks_per_step=100):
-        return WheelPacer(
-            WheelPacerConfig(
-                min_rate=10.0,
-                max_rate=10.0,
-                ease_power=1.0,
-                hysteresis=0.01,
-                max_ticks_per_step=max_ticks_per_step,
-                max_input=1.0,
-            )
+class PacerTests(unittest.TestCase):
+    def fixed_config(self, max_units_per_step=100):
+        return PacerConfig(
+            min_detents_per_second=10.0,
+            max_detents_per_second=10.0,
+            units_per_detent=1,
+            ease_power=1.0,
+            hysteresis=0.01,
+            max_units_per_step=max_units_per_step,
+            max_input=1.0,
         )
 
-    def test_hysteresis_returns_zero_and_resets_accumulator(self):
-        pacer = self.fixed_pacer()
+    def test_rate_for_amount_scales_by_units_per_detent(self):
+        config = self.fixed_config()
 
-        self.assertEqual(pacer.step(1.0, 0.09), 0)
-        self.assertEqual(pacer.step(0.0, 0.1), 0)
-        self.assertEqual(pacer.step(1.0, 0.02), 0)
+        self.assertEqual(rate_for_amount(1.0, config), 10.0)
+        self.assertEqual(rate_for_amount(0.0, config), 0.0)
+
+    def test_hysteresis_returns_zero_and_resets_accumulator(self):
+        config = self.fixed_config()
+        state = PacerState()
+
+        state, units = step_pacer(state, 1.0, 0.09, config)
+        self.assertEqual(units, 0)
+        state, units = step_pacer(state, 0.0, 0.1, config)
+        self.assertEqual(state, PacerState())
+        self.assertEqual(units, 0)
+        state, units = step_pacer(state, 1.0, 0.02, config)
+        self.assertEqual(units, 0)
 
     def test_accumulates_fractional_ticks(self):
-        pacer = self.fixed_pacer()
+        config = self.fixed_config()
+        state = PacerState()
 
-        self.assertEqual(pacer.step(1.0, 0.05), 0)
-        self.assertEqual(pacer.step(1.0, 0.05), 1)
+        state, units = step_pacer(state, 1.0, 0.05, config)
+        self.assertEqual(units, 0)
+        state, units = step_pacer(state, 1.0, 0.05, config)
+        self.assertEqual(units, 1)
 
     def test_negative_amount_emits_negative_ticks(self):
-        pacer = self.fixed_pacer()
+        config = self.fixed_config()
 
-        self.assertEqual(pacer.step(-1.0, 0.1), -1)
+        _state, units = step_pacer(PacerState(), -1.0, 0.1, config)
+        self.assertEqual(units, -1)
 
     def test_direction_change_discards_opposite_direction_accumulator(self):
-        pacer = self.fixed_pacer()
+        config = self.fixed_config()
+        state = PacerState()
 
-        self.assertEqual(pacer.step(1.0, 0.09), 0)
-        self.assertEqual(pacer.step(-1.0, 0.02), 0)
-        self.assertEqual(pacer.step(-1.0, 0.08), -1)
+        state, units = step_pacer(state, 1.0, 0.09, config)
+        self.assertEqual(units, 0)
+        state, units = step_pacer(state, -1.0, 0.02, config)
+        self.assertEqual(units, 0)
+        _state, units = step_pacer(state, -1.0, 0.08, config)
+        self.assertEqual(units, -1)
 
     def test_caps_ticks_per_step(self):
-        pacer = self.fixed_pacer(max_ticks_per_step=3)
+        config = self.fixed_config(max_units_per_step=3)
 
-        self.assertEqual(pacer.step(1.0, 1.0), 3)
+        _state, units = step_pacer(PacerState(), 1.0, 1.0, config)
+        self.assertEqual(units, 3)
+
+    def test_cap_discards_backlog_but_keeps_fractional_accumulator(self):
+        config = self.fixed_config(max_units_per_step=3)
+
+        state, units = step_pacer(PacerState(), 1.0, 1.05, config)
+
+        self.assertEqual(units, 3)
+        self.assertAlmostEqual(state.accumulator, 0.5)
 
 
 if __name__ == "__main__":

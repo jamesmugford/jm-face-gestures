@@ -1,18 +1,14 @@
 import threading
 import time
 
-from scroll_pacer import WheelPacer, WheelPacerConfig
+from scroll_pacer import PacerConfig, PacerState, step_pacer
 
 
 class PacedScroller:
-    def __init__(
-        self,
-        output,
-        pacer: WheelPacer | None = None,
-        flush_hz: float = 50.0,
-    ):
+    def __init__(self, output, config: PacerConfig, flush_hz: float = 120.0):
         self._output = output
-        self._pacer = pacer or WheelPacer(WheelPacerConfig())
+        self._config = config
+        self._state = PacerState()
         self._flush_dt = 1.0 / float(flush_hz)
         self._amount = 0.0
         self._lock = threading.Lock()
@@ -44,6 +40,6 @@ class PacedScroller:
             with self._lock:
                 amount = self._amount
 
-            ticks = self._pacer.step(amount, dt)
-            if ticks:
-                self._output.scroll(ticks)
+            self._state, units = step_pacer(self._state, amount, dt, self._config)
+            if units:
+                self._output.scroll(units)

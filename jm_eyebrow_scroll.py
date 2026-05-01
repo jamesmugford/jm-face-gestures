@@ -1,189 +1,36 @@
 import argparse
-import importlib.util
-import os
 import socket
-import sys
-import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from scroll_core import (
+    BrowMovement,
     BrowSignals,
     ScrollConfig,
     combine_brow_movement,
     scroll_amount_from_movement,
 )
+from scroll_pacer import PacerConfig
+from platform_scroller import DEFAULT_COMPAT_DETENT_UNITS, create_platform_scroller
+
 
 DEFAULT_UDP_PORT = 11111
-DEFAULT_SCROLL_CONFIG = ScrollConfig()
-SCROLL_THRESHOLD = DEFAULT_SCROLL_CONFIG.threshold
-SCROLL_SPEED = DEFAULT_SCROLL_CONFIG.speed
-MAX_SCROLL = DEFAULT_SCROLL_CONFIG.max_scroll
-
-_linux_scroller = None
-_linux_scroller_backend = None
-
-
-class NullScroller:
-    def set_amount(self, amount: float) -> None:
-        pass
-
-    def stop(self) -> None:
-        pass
+INPUT_TIMEOUT_SECONDS = 0.25
 
 
 @dataclass(frozen=True)
-class LinuxScrollConfig:
-    min_detents_per_second: float = 0.03
-    max_detents_per_second: float = 18.0
-    compat_detent_units: int = 48000
+class AppConfig:
+    port: int
+    scroll: ScrollConfig
+    pacer: PacerConfig
+    compat_detent_units: int
 
 
-DEFAULT_LINUX_SCROLL_CONFIG = LinuxScrollConfig()
-
-
-def _is_wayland_session() -> bool:
-    return (
-        os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland"
-        or "WAYLAND_DISPLAY" in os.environ
-    )
-
-
-def _python_module_available(module_name: str) -> bool:
-    return importlib.util.find_spec(module_name) is not None
-
-
-def _can_use_uinput_hires() -> bool:
-    return _python_module_available("evdev") and os.access("/dev/uinput", os.W_OK)
-
-
-def _select_linux_backend(preferred_backend: str) -> str:
-    if preferred_backend != "auto":
-        return preferred_backend
-
-    if _is_wayland_session():
-        if _can_use_uinput_hires():
-            return "uinput-hires"
-        raise RuntimeError(
-            "Wayland smooth scrolling requires python-evdev and write access "
-            "to /dev/uinput. Run `pip install -r requirements.txt` and check "
-            "your uinput permissions."
-        )
-
-    if os.environ.get("DISPLAY"):
-        return "xtest"
-
-    if _can_use_uinput_hires():
-        return "uinput-hires"
-
-    raise RuntimeError(
-        "No Linux scroll backend available. "
-        "Install uinput dependencies for Wayland or use X11/XTest."
-    )
-
-
-def _create_linux_scroller(
-    backend: str,
-    config: LinuxScrollConfig = DEFAULT_LINUX_SCROLL_CONFIG,
-):
-    if backend == "uinput-hires":
-        from uinput_hires_scroller import create_uinput_hires_scroller
-
-        return create_uinput_hires_scroller(
-            compat_detents=True,
-            compat_detent_units=config.compat_detent_units,
-            min_detents_per_second=config.min_detents_per_second,
-            max_detents_per_second=config.max_detents_per_second,
-        )
-
-    if backend == "xtest":
-        from xtest_wheel_pacer import XTestWheelPacer
-
-        return XTestWheelPacer(
-            min_rate=4.0,
-            max_rate=40.0,
-            ease_power=2.2,
-            hysteresis=0.01,
-            max_ticks_per_flush=6,
-            flush_hz=50,
-            max_input=1.0,
-        )
-
-    if backend == "none":
-        return NullScroller()
-
-    raise RuntimeError(f"Unknown Linux scroll backend: {backend}")
-
-
-def _get_linux_scroller(
-    preferred_backend: str = "auto",
-    config: LinuxScrollConfig = DEFAULT_LINUX_SCROLL_CONFIG,
-):
-    global _linux_scroller, _linux_scroller_backend
-
-    backend = _select_linux_backend(preferred_backend)
-    if _linux_scroller is None:
-        _linux_scroller = _create_linux_scroller(backend, config)
-        _linux_scroller_backend = backend
-        print(f"Using Linux scroll backend: {backend}")
-    elif preferred_backend != "auto" and backend != _linux_scroller_backend:
-        raise RuntimeError(
-            "Linux scroll backend is already "
-            f"{_linux_scroller_backend!r}, not {backend!r}"
-        )
-
-    return _linux_scroller
-
-
-def _stop_linux_scroller() -> None:
-    global _linux_scroller, _linux_scroller_backend
-
-    if _linux_scroller is None:
-        return
-
-    _linux_scroller.stop()
-    _linux_scroller = None
-    _linux_scroller_backend = None
-
-
-def smooth_scroll(
-    amount: float,
-    backend: str = "auto",
-    backend_config: LinuxScrollConfig = DEFAULT_LINUX_SCROLL_CONFIG,
-) -> None:
-    """
-    Platform-specific scroll implementation.
-
-    Linux backends are paced in a background thread, so zero amounts are passed
-    through after scrolling starts to stop any previously buffered movement.
-    """
-    amount = float(amount)
-
-    if sys.platform == "win32":
-        if amount != 0.0:
-            import win32api
-            import win32con
-
-            win32api.mouse_event(
-                win32con.MOUSEEVENTF_WHEEL,
-                0,
-                0,
-                int(amount * 120),
-                0,
-            )
-    elif sys.platform == "darwin":
-        if amount != 0.0:
-            import Quartz
-
-            scroll_unit = amount * 5
-            event = Quartz.CGEventCreateScrollWheelEvent(
-                None, Quartz.kCGScrollEventUnitLine, 1, int(scroll_unit)
-            )
-            Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
-    else:
-        if amount == 0.0 and _linux_scroller is None:
-            return
-        scroller = _get_linux_scroller(backend, backend_config)
-        scroller.set_amount(amount)
+@dataclass(frozen=True)
+class ScrollFrame:
+    name: str
+    movement: BrowMovement
+    amount: float
 
 
 def _load_livelinkface():
@@ -208,52 +55,30 @@ def _brow_signals_from_live_link(live_link_face, face_blend_shape) -> BrowSignal
     )
 
 
-def start_face_tracking(
-    port: int = DEFAULT_UDP_PORT,
-    scroll_backend: str = "auto",
-    scroll_config: ScrollConfig = DEFAULT_SCROLL_CONFIG,
-    linux_scroll_config: LinuxScrollConfig = DEFAULT_LINUX_SCROLL_CONFIG,
-) -> None:
-    print("Starting face tracking. Press Ctrl+C to stop.")
-    face_blend_shape, py_live_link_face = _load_livelinkface()
+def _scroll_frame_from_packet(
+    data: bytes,
+    decoder,
+    face_blend_shape,
+    scroll_config: ScrollConfig,
+) -> ScrollFrame | None:
+    success, live_link_face = decoder.decode(data)
+    if not success:
+        return None
 
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    try:
-        print(f"Starting face tracking on UDP port {port}")
-        s.bind(("", port))
-        while True:
-            data, _addr = s.recvfrom(1024)
-            success, live_link_face = py_live_link_face.decode(data)
-            if success:
-                signals = _brow_signals_from_live_link(
-                    live_link_face,
-                    face_blend_shape,
-                )
-                movement = combine_brow_movement(signals)
-                scroll_amount = scroll_amount_from_movement(movement, scroll_config)
-
-                smooth_scroll(scroll_amount, scroll_backend, linux_scroll_config)
-                if scroll_amount != 0.0:
-                    time.sleep(1 / 120)
-
-                print(f"Name: {live_link_face.name}")
-                print(
-                    "Combined Brow Movement - "
-                    f"Up: {movement.up:.2f}, Down: {movement.down:.2f}"
-                )
-                print(f"Scroll amount: {scroll_amount}")
-                print("-" * 40)
-    except KeyboardInterrupt:
-        print("Stopping face tracking...")
-    finally:
-        _stop_linux_scroller()
-        s.close()
+    signals = _brow_signals_from_live_link(live_link_face, face_blend_shape)
+    movement = combine_brow_movement(signals)
+    return ScrollFrame(
+        name=live_link_face.name,
+        movement=movement,
+        amount=scroll_amount_from_movement(movement, scroll_config),
+    )
 
 
-def main() -> None:
+def _build_parser() -> argparse.ArgumentParser:
+    default_scroll = ScrollConfig()
+    default_pacer = PacerConfig()
     parser = argparse.ArgumentParser(
-        description="Eyebrow-controlled scroll using face tracking"
+        description="Eyebrow-controlled smooth scroll"
     )
     parser.add_argument(
         "--port",
@@ -262,102 +87,121 @@ def main() -> None:
         help=f"UDP port to listen on (default: {DEFAULT_UDP_PORT})",
     )
     parser.add_argument(
-        "--scroll-backend",
-        choices=(
-            "auto",
-            "uinput-hires",
-            "xtest",
-            "none",
-        ),
-        default="auto",
-        help="Linux scroll backend (default: auto)",
-    )
-    parser.add_argument(
         "--scroll-threshold",
         type=float,
-        default=DEFAULT_SCROLL_CONFIG.threshold,
-        help=(
-            "Eyebrow dead zone threshold "
-            f"(default: {DEFAULT_SCROLL_CONFIG.threshold})"
-        ),
+        default=default_scroll.threshold,
+        help=f"Eyebrow dead zone threshold (default: {default_scroll.threshold})",
     )
     parser.add_argument(
         "--scroll-speed",
         type=float,
-        default=DEFAULT_SCROLL_CONFIG.speed,
-        help=f"Scroll sensitivity multiplier (default: {DEFAULT_SCROLL_CONFIG.speed})",
+        default=default_scroll.speed,
+        help=f"Scroll sensitivity multiplier (default: {default_scroll.speed})",
     )
     parser.add_argument(
         "--max-scroll",
         type=float,
-        default=DEFAULT_SCROLL_CONFIG.max_scroll,
-        help=(
-            "Maximum scroll amount before pacing "
-            f"(default: {DEFAULT_SCROLL_CONFIG.max_scroll})"
-        ),
+        default=default_scroll.max_scroll,
+        help=f"Maximum mapped scroll amount (default: {default_scroll.max_scroll})",
     )
     parser.add_argument(
         "--min-scroll-rate",
         type=float,
-        default=None,
+        default=default_pacer.min_detents_per_second,
         help=(
-            "Minimum Linux wheel detents per second after the dead zone "
-            "(default: backend-specific)"
+            "Minimum wheel detents per second after the dead zone "
+            f"(default: {default_pacer.min_detents_per_second})"
         ),
     )
     parser.add_argument(
         "--max-scroll-rate",
         type=float,
-        default=None,
+        default=default_pacer.max_detents_per_second,
         help=(
-            "Maximum Linux wheel detents per second (default: backend-specific)"
+            "Maximum wheel detents per second "
+            f"(default: {default_pacer.max_detents_per_second})"
         ),
     )
     parser.add_argument(
         "--compat-detent-units",
         type=int,
-        default=None,
+        default=DEFAULT_COMPAT_DETENT_UNITS,
         help=(
             "Hi-res units per fallback wheel click "
-            f"(default: {DEFAULT_LINUX_SCROLL_CONFIG.compat_detent_units})"
+            f"on Linux (default: {DEFAULT_COMPAT_DETENT_UNITS})"
         ),
     )
-    args = parser.parse_args()
+    return parser
 
-    min_scroll_rate = args.min_scroll_rate
-    if min_scroll_rate is None:
-        min_scroll_rate = DEFAULT_LINUX_SCROLL_CONFIG.min_detents_per_second
 
-    max_scroll_rate = args.max_scroll_rate
-    if max_scroll_rate is None:
-        max_scroll_rate = DEFAULT_LINUX_SCROLL_CONFIG.max_detents_per_second
-
-    compat_detent_units = args.compat_detent_units
-    if compat_detent_units is None:
-        compat_detent_units = DEFAULT_LINUX_SCROLL_CONFIG.compat_detent_units
-
-    scroll_config = ScrollConfig(
-        threshold=args.scroll_threshold,
-        speed=args.scroll_speed,
-        max_scroll=args.max_scroll,
+def parse_config(argv: Sequence[str] | None = None) -> AppConfig:
+    args = _build_parser().parse_args(argv)
+    return AppConfig(
+        port=args.port,
+        scroll=ScrollConfig(
+            threshold=args.scroll_threshold,
+            speed=args.scroll_speed,
+            max_scroll=args.max_scroll,
+        ),
+        pacer=PacerConfig(
+            min_detents_per_second=args.min_scroll_rate,
+            max_detents_per_second=args.max_scroll_rate,
+        ),
+        compat_detent_units=args.compat_detent_units,
     )
-    linux_scroll_config = LinuxScrollConfig(
-        min_detents_per_second=min_scroll_rate,
-        max_detents_per_second=max_scroll_rate,
-        compat_detent_units=compat_detent_units,
-    )
+
+
+def run(config: AppConfig) -> None:
+    face_blend_shape, decoder = _load_livelinkface()
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.settimeout(INPUT_TIMEOUT_SECONDS)
+    scroller = None
 
     try:
-        start_face_tracking(
-            args.port,
-            scroll_backend=args.scroll_backend,
-            scroll_config=scroll_config,
-            linux_scroll_config=linux_scroll_config,
+        sock.bind(("", config.port))
+        scroller = create_platform_scroller(
+            pacer_config=config.pacer,
+            compat_detent_units=config.compat_detent_units,
         )
+        print(f"Listening for Live Link Face UDP on port {config.port}")
+        print("Move brows to scroll. Press Ctrl+C to stop.")
+        last_name = None
+
+        while True:
+            try:
+                data, _addr = sock.recvfrom(65535)
+            except socket.timeout:
+                scroller.set_amount(0.0)
+                continue
+
+            frame = _scroll_frame_from_packet(
+                data,
+                decoder,
+                face_blend_shape,
+                config.scroll,
+            )
+            if frame is None:
+                scroller.set_amount(0.0)
+                continue
+
+            if frame.name != last_name:
+                print(f"Receiving tracking data from {frame.name!r}")
+                last_name = frame.name
+            scroller.set_amount(frame.amount)
+    finally:
+        if scroller is not None:
+            scroller.stop()
+        sock.close()
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    try:
+        run(parse_config(argv))
     except KeyboardInterrupt:
-        print("\nStopping face tracking...")
-    except Exception as e:
-        print(f"Error: {e}")
+        print("\nStopping eyebrow scroll...")
+    except (OSError, RuntimeError) as exc:
+        raise SystemExit(f"Error: {exc}") from exc
 
 
 if __name__ == "__main__":

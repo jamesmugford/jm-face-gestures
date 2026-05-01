@@ -2,56 +2,62 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class WheelPacerConfig:
-    min_rate: float = 4.0
-    max_rate: float = 40.0
+class PacerConfig:
+    min_detents_per_second: float = 0.03
+    max_detents_per_second: float = 18.0
+    units_per_detent: int = 120
     ease_power: float = 2.2
     hysteresis: float = 0.01
-    max_ticks_per_step: int = 6
+    max_units_per_step: int = 48
     max_input: float = 1.0
 
 
-class WheelPacer:
-    def __init__(self, config: WheelPacerConfig = WheelPacerConfig()):
-        self.config = config
-        self._accum = 0.0
-        self._direction = 0
+@dataclass(frozen=True)
+class PacerState:
+    accumulator: float = 0.0
+    direction: int = 0
 
-    def reset(self) -> None:
-        self._accum = 0.0
-        self._direction = 0
 
-    def rate_for_amount(self, amount: float) -> float:
-        amount = float(amount)
-        if abs(amount) < self.config.hysteresis:
-            return 0.0
+def rate_for_amount(amount: float, config: PacerConfig = PacerConfig()) -> float:
+    amount = float(amount)
+    if abs(amount) < config.hysteresis:
+        return 0.0
 
-        magnitude = min(1.0, abs(amount) / self.config.max_input)
-        eased = magnitude ** self.config.ease_power
-        return self.config.min_rate + (
-            self.config.max_rate - self.config.min_rate
-        ) * eased
+    magnitude = min(1.0, abs(amount) / config.max_input)
+    eased = magnitude**config.ease_power
+    detents_per_second = config.min_detents_per_second + (
+        config.max_detents_per_second - config.min_detents_per_second
+    ) * eased
+    return detents_per_second * config.units_per_detent
 
-    def step(self, amount: float, dt: float) -> int:
-        dt = float(dt)
-        if dt <= 0.0:
-            return 0
 
-        rate = self.rate_for_amount(amount)
-        if rate <= 0.0:
-            self.reset()
-            return 0
+def step_pacer(
+    state: PacerState,
+    amount: float,
+    dt: float,
+    config: PacerConfig = PacerConfig(),
+) -> tuple[PacerState, int]:
+    dt = float(dt)
+    if dt <= 0.0:
+        return state, 0
 
-        direction = 1 if amount > 0 else -1
-        if direction != self._direction:
-            self._accum = 0.0
-            self._direction = direction
+    rate = rate_for_amount(amount, config)
+    if rate <= 0.0:
+        return PacerState(), 0
 
-        self._accum += rate * dt
-        ticks = int(self._accum)
-        if ticks <= 0:
-            return 0
+    direction = 1 if amount > 0 else -1
+    accumulator = state.accumulator if state.direction == direction else 0.0
+    accumulator += rate * dt
 
-        emitted = min(ticks, max(1, int(self.config.max_ticks_per_step)))
-        self._accum -= emitted
-        return direction * emitted
+    units = int(accumulator)
+    if units <= 0:
+        return PacerState(accumulator=accumulator, direction=direction), 0
+
+    max_units = max(1, int(config.max_units_per_step))
+    emitted = min(units, max_units)
+    remaining = accumulator - (units if units > max_units else emitted)
+    next_state = PacerState(
+        accumulator=remaining,
+        direction=direction,
+    )
+    return next_state, direction * emitted

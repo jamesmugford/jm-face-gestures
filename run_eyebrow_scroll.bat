@@ -1,18 +1,19 @@
 @echo off
+setlocal
+
+cd /d "%~dp0"
+
 echo Setting up Eyebrow Scroll...
 
-if not exist .venv (
+if not exist ".venv" (
     echo Creating virtual environment...
-    python -m venv .venv
+    py -3 -m venv .venv || exit /b 1
 )
 
-echo Activating virtual environment...
-call .venv\Scripts\activate
+call .venv\Scripts\activate.bat || exit /b 1
 
 echo Installing requirements...
-pip install -r requirements.txt
+python -m pip install -r requirements.txt || exit /b 1
 
 echo Starting Eyebrow Scroll...
-python jm_eyebrow_scroll.py
-
-pause
+python -u jm_eyebrow_scroll.py %*
