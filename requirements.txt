@@ -1,4 +1,1 @@
-pylivelinkface
-evdev; platform_system == 'Linux'
-pywin32; platform_system == 'Windows'
-pyobjc-framework-Quartz; platform_system == 'Darwin'
+-e .

@@ -32,16 +32,28 @@ Linux Wayland is the primary target and uses `/dev/uinput` high-resolution wheel
 Install dependencies and start the default brow scroll mapping:
 
 ```bash
-./run_eyebrow_scroll.sh
+./run_face_gestures.sh
 ```
 
 On Windows:
 
 ```bat
-run_eyebrow_scroll.bat
+run_face_gestures.bat
 ```
 
-The scripts create `.venv` if needed, install `requirements.txt`, and run `jm_eyebrow_scroll.py` inside the virtualenv.
+The scripts create `.venv` if needed, install `requirements.txt`, and run `python -m face_gestures` inside the virtualenv.
+
+You can also run the module directly:
+
+```bash
+python -m face_gestures scroll
+```
+
+After installing the package, the console command is available too:
+
+```bash
+face-gestures scroll
+```
 
 Set Live Link Face to send to this machine's IP address on UDP port `11111`.
 
@@ -56,19 +68,19 @@ Check packet arrival before testing scrolling:
 Use another signal mapping without writing Python:
 
 ```bash
-./run_eyebrow_scroll.sh --up-signal mouth_smile --down-signal jaw_open
+./run_face_gestures.sh scroll --up-signal mouth_smile --down-signal jaw_open
 ```
 
 Adjust dead zone and sensitivity:
 
 ```bash
-./run_eyebrow_scroll.sh --scroll-threshold 0.06 --scroll-speed 1.5
+./run_face_gestures.sh scroll --scroll-threshold 0.06 --scroll-speed 1.5
 ```
 
 Adjust pacing:
 
 ```bash
-./run_eyebrow_scroll.sh --min-scroll-rate 0.02 --max-scroll-rate 4
+./run_face_gestures.sh scroll --min-scroll-rate 0.02 --max-scroll-rate 4
 ```
 
 Some terminals multiply wheel input into several text rows. Tune that in the terminal rather than changing this app's input method. For Ghostty:
@@ -88,7 +100,7 @@ python -m unittest discover
 Run the CLI help:
 
 ```bash
-python jm_eyebrow_scroll.py --help
+python -m face_gestures scroll --help
 ```
 
 ## License

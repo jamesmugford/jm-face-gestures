@@ -1,4 +1,5 @@
 import argparse
+import sys
 from collections.abc import Sequence
 
 from .control import GestureControl
@@ -14,8 +15,7 @@ from .scroll import (
 from .source import DEFAULT_UDP_PORT
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Face gesture smooth scroll")
+def _add_scroll_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--port",
         type=int,
@@ -74,11 +74,35 @@ def build_parser() -> argparse.ArgumentParser:
             f"(default: {DEFAULT_COMPAT_DETENT_UNITS})"
         ),
     )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="face-gestures",
+        description="Face gesture controls",
+    )
+    subparsers = parser.add_subparsers(dest="command")
+    scroll_parser = subparsers.add_parser(
+        "scroll",
+        help="map face signals to smooth scrolling",
+        description="Face gesture smooth scroll",
+    )
+    _add_scroll_arguments(scroll_parser)
     return parser
 
 
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    args = list(sys.argv[1:] if argv is None else argv)
+    if not args or args[0].startswith("-"):
+        args.insert(0, "scroll")
+    return build_parser().parse_args(args)
+
+
 def main(argv: Sequence[str] | None = None) -> None:
-    args = build_parser().parse_args(argv)
+    args = parse_args(argv)
+    if args.command != "scroll":
+        raise SystemExit(f"Unknown command: {args.command}")
+
     last_name = None
 
     def report_frame(frame) -> None:

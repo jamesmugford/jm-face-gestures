@@ -1,3 +1,25 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "face-gestures"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "pylivelinkface",
+    "evdev; platform_system == 'Linux'",
+    "pywin32; platform_system == 'Windows'",
+    "pyobjc-framework-Quartz; platform_system == 'Darwin'",
+]
+
+[project.scripts]
+face-gestures = "face_gestures.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["face_gestures*"]
+exclude = ["tests*"]
+
 [tool.black]
 line-length = 88
 target-version = ["py311", "py312", "py313"]
@@ -6,4 +28,3 @@ skip-string-normalization = false
 [tool.isort]
 profile = "black"
 line_length = 88
-
