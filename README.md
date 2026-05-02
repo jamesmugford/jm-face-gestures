@@ -10,7 +10,7 @@ GestureControl().scroll(
         up="brows_up",
         down="brows_down",
         threshold=0.08,
-        speed=1.0,
+        speed=2.0,
     )
 ).run()
 ```
@@ -74,7 +74,7 @@ Use another signal mapping without writing Python:
 Adjust dead zone and sensitivity:
 
 ```bash
-./run_face_gestures.sh scroll --scroll-threshold 0.06 --scroll-speed 1.5
+./run_face_gestures.sh scroll --scroll-threshold 0.06 --scroll-speed 2.5
 ```
 
 Adjust pacing:

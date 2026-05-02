@@ -4,7 +4,7 @@ from .signals import SignalFrame, normalize_signal_name
 
 
 DEFAULT_THRESHOLD = 0.08
-DEFAULT_SPEED = 1.0
+DEFAULT_SPEED = 2.0
 DEFAULT_MAX_INTENT = 1.0
 DEFAULT_MIN_RATE = 0.03
 DEFAULT_MAX_RATE = 18.0

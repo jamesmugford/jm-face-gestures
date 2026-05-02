@@ -5,7 +5,12 @@ from face_gestures import Scroll, SignalFrame
 
 class ScrollTests(unittest.TestCase):
     def test_vertical_scroll_uses_logical_brow_aliases(self):
-        scroll = Scroll.vertical(up="brows_up", down="brows_down", threshold=0.1)
+        scroll = Scroll.vertical(
+            up="brows_up",
+            down="brows_down",
+            threshold=0.1,
+            speed=1.0,
+        )
         frame = SignalFrame(
             {
                 "brow_inner_up": 0.3,
@@ -25,7 +30,12 @@ class ScrollTests(unittest.TestCase):
         self.assertAlmostEqual(scroll.intent(frame), -0.5)
 
     def test_vertical_scroll_subtracts_opposing_signals(self):
-        scroll = Scroll.vertical(up="mouth_smile", down="jaw_open", threshold=0.1)
+        scroll = Scroll.vertical(
+            up="mouth_smile",
+            down="jaw_open",
+            threshold=0.1,
+            speed=1.0,
+        )
         frame = SignalFrame(
             {
                 "mouth_smile_left": 0.4,

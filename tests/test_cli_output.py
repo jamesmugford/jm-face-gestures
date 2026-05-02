@@ -14,7 +14,7 @@ class CliAndOutputTests(unittest.TestCase):
         self.assertEqual(args.up_signal, "brows_up")
         self.assertEqual(args.down_signal, "brows_down")
         self.assertEqual(args.scroll_threshold, 0.08)
-        self.assertEqual(args.scroll_speed, 1.0)
+        self.assertEqual(args.scroll_speed, 2.0)
         self.assertEqual(args.max_intent, 1.0)
         self.assertEqual(args.min_scroll_rate, 0.03)
         self.assertEqual(args.max_scroll_rate, 18.0)
