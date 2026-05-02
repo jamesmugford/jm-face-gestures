@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-echo "Setting up Eyebrow Scroll..."
+echo "Setting up Face Gesture Scroll..."
 
 # Create virtual environment if it doesn't exist
 if [ ! -d ".venv" ]; then
@@ -25,5 +25,5 @@ echo "Installing requirements..."
 python -m pip install -r requirements.txt
 
 # Start the application
-echo "Starting Eyebrow Scroll..."
+echo "Starting Face Gesture Scroll..."
 python -u jm_eyebrow_scroll.py "$@"

@@ -1,11 +1,19 @@
 import os
+import sys
 import time
-
-from scroll_pacer import PacerConfig
-from scroll_runtime import PacedScroller
 
 
 DEFAULT_COMPAT_DETENT_UNITS = 48000
+
+
+def platform_output_kind(platform: str = sys.platform) -> str:
+    if platform.startswith("linux"):
+        return "linux-uinput"
+    if platform == "win32":
+        return "windows-wheel"
+    if platform == "darwin":
+        return "macos-quartz"
+    raise RuntimeError(f"Unsupported platform: {platform}")
 
 
 def _load_evdev():
@@ -33,7 +41,7 @@ def _check_uinput_access() -> None:
     )
 
 
-class UInputHiResWheelOutput:
+class LinuxUInputScrollOutput:
     def __init__(
         self,
         compat_detent_units: int = DEFAULT_COMPAT_DETENT_UNITS,
@@ -72,13 +80,61 @@ class UInputHiResWheelOutput:
         self._ui.close()
 
 
-def create_uinput_scroller(
-    pacer_config: PacerConfig = PacerConfig(),
+class WindowsWheelOutput:
+    def __init__(self):
+        try:
+            import win32api
+            import win32con
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(
+                "pywin32 is not installed. Run `pip install -r requirements.txt`."
+            ) from exc
+
+        self._win32api = win32api
+        self._wheel_event = win32con.MOUSEEVENTF_WHEEL
+
+    def scroll(self, units: int) -> None:
+        units = int(units)
+        if units == 0:
+            return
+        self._win32api.mouse_event(self._wheel_event, 0, 0, units, 0)
+
+
+class MacOSScrollOutput:
+    def __init__(self):
+        try:
+            import Quartz
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(
+                "pyobjc-framework-Quartz is not installed. "
+                "Run `pip install -r requirements.txt`."
+            ) from exc
+
+        self._quartz = Quartz
+
+    def scroll(self, units: int) -> None:
+        units = int(units)
+        if units == 0:
+            return
+
+        event = self._quartz.CGEventCreateScrollWheelEvent(
+            None,
+            self._quartz.kCGScrollEventUnitPixel,
+            1,
+            units,
+        )
+        self._quartz.CGEventPost(self._quartz.kCGHIDEventTap, event)
+
+
+def create_scroll_output(
     compat_detent_units: int = DEFAULT_COMPAT_DETENT_UNITS,
-    flush_hz: float = 120.0,
-) -> PacedScroller:
-    return PacedScroller(
-        UInputHiResWheelOutput(compat_detent_units=compat_detent_units),
-        pacer_config,
-        flush_hz=flush_hz,
-    )
+    platform: str = sys.platform,
+):
+    kind = platform_output_kind(platform)
+    if kind == "linux-uinput":
+        return LinuxUInputScrollOutput(compat_detent_units=compat_detent_units)
+    if kind == "windows-wheel":
+        return WindowsWheelOutput()
+    if kind == "macos-quartz":
+        return MacOSScrollOutput()
+    raise RuntimeError(f"Unsupported platform output: {kind}")

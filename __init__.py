@@ -1,1 +1,0 @@
-"""Eyebrow scroll application package."""

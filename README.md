@@ -1,8 +1,21 @@
 # Face Gestures
 
-Eyebrow-controlled smooth scrolling using an iPhone running Live Link Face.
+Generic face-signal controls for smooth scrolling. The default input source is Live Link Face over UDP, but the public API works in terms of named signals and scroll mappings.
 
-Linux Wayland is the primary target and uses `/dev/uinput` high-resolution wheel events. Windows and macOS use standard OS wheel/scroll APIs through optional dependencies.
+```python
+from face_gestures import GestureControl, Scroll
+
+GestureControl().scroll(
+    Scroll.vertical(
+        up="brows_up",
+        down="brows_down",
+        threshold=0.08,
+        speed=1.0,
+    )
+).run()
+```
+
+`brows_up` and `brows_down` are logical aliases over the raw ARKit/Live Link brow blendshapes. Raw signal names like `jaw_open`, `mouth_smile_left`, and `eye_blink_right` are also available.
 
 ## Requirements
 
@@ -12,25 +25,23 @@ Linux Wayland is the primary target and uses `/dev/uinput` high-resolution wheel
 - Windows: `pywin32`, installed by `requirements.txt`
 - macOS: Quartz from PyObjC, installed by `requirements.txt`
 
-## Setup
+Linux Wayland is the primary target and uses `/dev/uinput` high-resolution wheel events. Windows and macOS use standard OS scroll APIs through optional dependencies.
 
-Install dependencies and start the app:
+## Run
+
+Install dependencies and start the default brow scroll mapping:
 
 ```bash
 ./run_eyebrow_scroll.sh
 ```
 
-The script creates `.venv` if needed, installs `requirements.txt`, and runs `jm_eyebrow_scroll.py` inside the virtualenv.
-
-On Windows, run:
+On Windows:
 
 ```bat
 run_eyebrow_scroll.bat
 ```
 
-If `/dev/uinput` is not writable, configure your distro's uinput permissions or add your user to the appropriate input/uinput group, then log out and back in.
-
-## Live Link
+The scripts create `.venv` if needed, install `requirements.txt`, and run `jm_eyebrow_scroll.py` inside the virtualenv.
 
 Set Live Link Face to send to this machine's IP address on UDP port `11111`.
 
@@ -40,30 +51,25 @@ Check packet arrival before testing scrolling:
 ./.venv/bin/python diagnose_livelink.py --seconds 30
 ```
 
-Use a custom port if needed:
+## CLI Tuning
+
+Use another signal mapping without writing Python:
 
 ```bash
-./run_eyebrow_scroll.sh --port 12345
+./run_eyebrow_scroll.sh --up-signal mouth_smile --down-signal jaw_open
 ```
 
-## Tuning
-
-Raise eyebrows to scroll up. Lower eyebrows to scroll down. Larger brow movement scrolls faster.
-
-Lower the dead zone for smaller eyebrow movements:
+Adjust dead zone and sensitivity:
 
 ```bash
-./run_eyebrow_scroll.sh --scroll-threshold 0.06
+./run_eyebrow_scroll.sh --scroll-threshold 0.06 --scroll-speed 1.5
 ```
 
-Increase or reduce sensitivity:
+Adjust pacing:
 
 ```bash
-./run_eyebrow_scroll.sh --scroll-speed 1.5
-./run_eyebrow_scroll.sh --max-scroll-rate 4
+./run_eyebrow_scroll.sh --min-scroll-rate 0.02 --max-scroll-rate 4
 ```
-
-The default slow crawl starts at `0.03` wheel detents per second and tops out at `18.0` detents per second.
 
 Some terminals multiply wheel input into several text rows. Tune that in the terminal rather than changing this app's input method. For Ghostty:
 
