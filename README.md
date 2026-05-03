@@ -27,6 +27,10 @@ GestureControl().scroll(
 
 Linux Wayland is the primary target and uses `/dev/uinput` high-resolution wheel events. Windows and macOS use standard OS scroll APIs through optional dependencies.
 
+## Firewall
+sudo firewall-cmd --permanent --add-port=11111/udp
+sudo firewall-cmd --reload
+
 ## Run
 
 Install dependencies and start the default brow scroll mapping:
