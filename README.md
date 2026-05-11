@@ -27,9 +27,52 @@ GestureControl().scroll(
 
 Linux Wayland is the primary target and uses `/dev/uinput` high-resolution wheel events. Windows and macOS use standard OS scroll APIs through optional dependencies.
 
+## Linux Setup
+
+The Linux output uses `python-evdev`, which opens `/dev/uinput` read-write. Make sure your user is in the `input` group:
+
+```bash
+sudo usermod -aG input "$USER"
+```
+
+Log out and back in after changing groups.
+
+Some systems ship a `/dev/uinput` rule with group write-only permissions, such as `0620`. That is not enough for `python-evdev`. Add a local udev rule that grants read-write access to the `input` group:
+
+```bash
+sudo tee /etc/udev/rules.d/99-uinput-evdev.rules >/dev/null <<'EOF'
+KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"
+EOF
+
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=misc --sysname-match=uinput
+```
+
+Verify access:
+
+```bash
+stat -c '%n %a %U %G %A' /dev/uinput
+id
+```
+
+`/dev/uinput` should show group `input` with read-write permissions, for example `660 root input crw-rw----`.
+
 ## Firewall
+
+Live Link Face sends tracking data over UDP port `11111`. Allow that port through the local firewall.
+
+With UFW:
+
+```bash
+sudo ufw allow 11111/udp
+```
+
+With firewalld:
+
+```bash
 sudo firewall-cmd --permanent --add-port=11111/udp
 sudo firewall-cmd --reload
+```
 
 ## Run
 
