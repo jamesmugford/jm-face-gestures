@@ -9,7 +9,7 @@ GestureControl().scroll(
     Scroll.vertical(
         up="brows_up",
         down="brows_down",
-        threshold=0.08,
+        threshold=0.13,
         speed=2.0,
     )
 ).run()

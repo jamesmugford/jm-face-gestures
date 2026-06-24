@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from .signals import SignalFrame, normalize_signal_name
 
 
-DEFAULT_THRESHOLD = 0.08
+DEFAULT_THRESHOLD = 0.13
 DEFAULT_SPEED = 2.0
 DEFAULT_MAX_INTENT = 1.0
 DEFAULT_MIN_RATE = 0.03
